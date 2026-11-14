@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">FloatHub</string>
+    <string name="title">FloatHub — плавающие окна</string>
+    <string name="hint">1. Нажмите «Разрешить поверх окон» и включите тумблер для FloatHub.\n2. Выдайте доступ к фото (для галереи).\n3. Запустите панель — на экране появится плавающий кружок.\n4. Тап по кружку открывает меню: Галерея, Браузер, Discord, Заметки, Приложения. Окна можно перетаскивать и открывать несколько сразу.</string>
+    <string name="btn_overlay">Разрешить поверх окон</string>
+    <string name="btn_storage">Дать доступ к фото</string>
+    <string name="btn_start">Запустить панель</string>
+    <string name="btn_stop">Остановить панель</string>
+</resources>
