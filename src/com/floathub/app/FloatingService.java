@@ -8,6 +8,7 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
+import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
 import android.content.pm.ServiceInfo;
 import android.graphics.Bitmap;
@@ -22,6 +23,7 @@ import android.os.Handler;
 import android.os.IBinder;
 import android.os.Looper;
 import android.provider.MediaStore;
+import android.provider.Settings;
 import android.view.Gravity;
 import android.view.MotionEvent;
 import android.view.View;
@@ -113,6 +115,14 @@ public class FloatingService extends Service {
         for (FloatWindow w : new ArrayList<>(windows.values())) {
             w.close();
         }
+    }
+
+    private boolean hasMediaPermission() {
+        if (Build.VERSION.SDK_INT >= 33) {
+            return checkSelfPermission("android.permission.READ_MEDIA_IMAGES") == PackageManager.PERMISSION_GRANTED
+                    || checkSelfPermission("android.permission.READ_MEDIA_VISUAL_USER_SELECTED") == PackageManager.PERMISSION_GRANTED;
+        }
+        return checkSelfPermission("android.permission.READ_EXTERNAL_STORAGE") == PackageManager.PERMISSION_GRANTED;
     }
 
     private int dp(float v) {
@@ -223,29 +233,46 @@ public class FloatingService extends Service {
         head.addView(quit);
         box.addView(head);
 
+        // cells: [id, label]; web links resolved in openWindow()
         String[][] items = {
-                {"🖼", "Галерея", "gallery"},
-                {"🌐", "Браузер", "browser"},
-                {"💬", "Discord", "discord"},
-                {"📝", "Заметки", "notes"},
-                {"📱", "Приложения", "apps"},
+                {"gallery", "\ud83d\uddbc Галерея"},
+                {"notes", "\ud83d\udcdd Заметки"},
+                {"browser", "\ud83c\udf10 Браузер"},
+                {"apps", "\ud83d\udcf1 Приложения"},
+                {"discord", "\ud83d\udcac Discord"},
+                {"gmail", "\u2709\ufe0f Gmail"},
+                {"youtube", "\u25b6\ufe0f YouTube"},
+                {"telegram", "\u2708\ufe0f Telegram"},
+                {"whatsapp", "\ud83d\udfe2 WhatsApp"},
+                {"instagram", "\ud83d\udcf7 Instagram"},
+                {"vk", "\ud83c\udd95 VK"},
+                {"play", "\ud83d\udecd Маркет"},
         };
-        for (String[] it : items) {
-            TextView row = new TextView(this);
-            row.setText(it[0] + "  " + it[1]);
-            row.setTextColor(Color.WHITE);
-            row.setTextSize(16);
-            row.setPadding(dp(10), dp(12), dp(10), dp(12));
-            row.setBackground(roundedBg(0xFF2B3140, 12));
-            LinearLayout.LayoutParams rp = new LinearLayout.LayoutParams(
+        for (int i = 0; i < items.length; i += 2) {
+            LinearLayout gridRow = new LinearLayout(this);
+            gridRow.setOrientation(LinearLayout.HORIZONTAL);
+            for (int j = i; j < Math.min(i + 2, items.length); j++) {
+                TextView cell = new TextView(this);
+                cell.setText(items[j][1]);
+                cell.setTextColor(Color.WHITE);
+                cell.setTextSize(15);
+                cell.setGravity(Gravity.CENTER);
+                cell.setPadding(dp(8), dp(14), dp(8), dp(14));
+                cell.setBackground(roundedBg(0xFF2B3140, 12));
+                final String wid = items[j][0];
+                cell.setOnClickListener(v -> {
+                    hideMenu();
+                    openWindow(wid);
+                });
+                LinearLayout.LayoutParams cp = new LinearLayout.LayoutParams(
+                        0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
+                if (j > i) cp.leftMargin = dp(8);
+                gridRow.addView(cell, cp);
+            }
+            LinearLayout.LayoutParams gp = new LinearLayout.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-            rp.topMargin = dp(8);
-            String id = it[2];
-            row.setOnClickListener(v -> {
-                hideMenu();
-                openWindow(id);
-            });
-            box.addView(row, rp);
+            gp.topMargin = dp(8);
+            box.addView(gridRow, gp);
         }
 
         menuParams = new WindowManager.LayoutParams(
@@ -271,36 +298,52 @@ public class FloatingService extends Service {
         int w, h;
         switch (id) {
             case "gallery":
-                title = "🖼 Галерея";
+                title = "\ud83d\uddbc Галерея";
                 content = new GalleryContent(this);
                 w = 320; h = 440;
                 break;
-            case "browser":
-                title = "🌐 Браузер";
-                content = new BrowserContent(this, "https://www.google.com", false);
-                w = 340; h = 480;
-                break;
-            case "discord":
-                title = "💬 Discord";
-                content = new BrowserContent(this, DISCORD_URL, true);
-                w = 340; h = 480;
-                break;
             case "notes":
-                title = "📝 Заметки";
+                title = "\ud83d\udcdd Заметки";
                 content = new NotesContent(this);
                 w = 300; h = 380;
                 break;
             case "apps":
-            default:
-                title = "📱 Приложения";
+                title = "\ud83d\udcf1 Приложения";
                 content = new AppsContent(this);
                 w = 320; h = 440;
                 break;
+            default: {
+                String[] link = webLink(id);
+                title = link[1];
+                content = new BrowserContent(this, link[2], "1".equals(link[3]));
+                w = link[0].equals("gmail") ? 360 : 340;
+                h = link[0].equals("gmail") ? 500 : 480;
+                break;
+            }
         }
         FloatWindow win = new FloatWindow(id, title, w, h, content);
         if (win.root != null) {
             windows.put(id, win);
         }
+    }
+
+    /** [id, title, url, desktopUa("1"/"0")] */
+    private static String[] webLink(String id) {
+        String[][] links = {
+                {"browser", "\ud83c\udf10 Браузер", "https://www.google.com", "0"},
+                {"discord", "\ud83d\udcac Discord", "https://discord.com/app", "1"},
+                {"gmail", "\u2709\ufe0f Gmail", "https://mail.google.com/mail/u/0/#inbox", "1"},
+                {"youtube", "\u25b6\ufe0f YouTube", "https://m.youtube.com", "0"},
+                {"telegram", "\u2708\ufe0f Telegram", "https://web.telegram.org/k/", "1"},
+                {"whatsapp", "\ud83d\udfe2 WhatsApp", "https://web.whatsapp.com", "1"},
+                {"instagram", "\ud83d\udcf7 Instagram", "https://www.instagram.com", "1"},
+                {"vk", "\ud83c\udd95 VK", "https://vk.com/feed", "0"},
+                {"play", "\ud83d\udecd Маркет", "https://play.google.com/store", "0"},
+        };
+        for (String[] l : links) {
+            if (l[0].equals(id)) return l;
+        }
+        return links[0];
     }
 
     private class FloatWindow {
@@ -398,6 +441,7 @@ public class FloatingService extends Service {
     private class GalleryContent extends FrameLayout {
         private final GridView grid;
         private final TextView empty;
+        private final Button grant;
         private final List<Bitmap> thumbs = new ArrayList<>();
         private final List<Uri> uris = new ArrayList<>();
 
@@ -430,14 +474,55 @@ public class FloatingService extends Service {
                     ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
 
             empty = new TextView(ctx);
-            empty.setText("Нет доступа к фото или изображений не найдено.\nВыдайте доступ в главном окне приложения.");
             empty.setTextColor(0xFF9AA3B2);
             empty.setTextSize(13);
             empty.setPadding(dp(16), dp(24), dp(16), dp(16));
             addView(empty, new FrameLayout.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
-            loadImages();
+            grant = new Button(ctx);
+            grant.setText("Выдать доступ");
+            grant.setTextColor(Color.WHITE);
+            grant.setBackground(roundedBg(0xFF4F7CFF, 10));
+            addView(grant, new FrameLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+            grant.setVisibility(View.GONE);
+            grant.setOnClickListener(v -> {
+                try {
+                    Intent i = new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                            Uri.parse("package:" + getPackageName()));
+                    i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                    startActivity(i);
+                } catch (Exception ignored) {}
+            });
+
+            updateEmptyState(0);
+            if (hasMediaPermission()) {
+                loadImages();
+            }
+        }
+
+        private void updateEmptyState(int loaded) {
+            if (loaded > 0) {
+                grid.setVisibility(View.VISIBLE);
+                empty.setVisibility(View.GONE);
+                grant.setVisibility(View.GONE);
+                return;
+            }
+            grid.setVisibility(View.GONE);
+            empty.setVisibility(View.VISIBLE);
+            boolean full = checkSelfPermission("android.permission.READ_MEDIA_IMAGES")
+                    == PackageManager.PERMISSION_GRANTED;
+            boolean partial = checkSelfPermission("android.permission.READ_MEDIA_VISUAL_USER_SELECTED")
+                    == PackageManager.PERMISSION_GRANTED;
+            grant.setVisibility(full ? View.GONE : View.VISIBLE);
+            if (full) {
+                empty.setText("Изображения не найдены.");
+            } else if (partial) {
+                empty.setText("Доступ только к выбранным фото, и они не найдены.\nНажмите «Выдать доступ» → «Фото и видео» → выберите папки или «Разрешить всё», затем заново откройте галерею.");
+            } else {
+                empty.setText("Нет доступа к фото.\nНажмите «Выдать доступ», откройте «Разрешения» → «Фото и видео» → «Разрешить всё», затем заново откройте галерею.");
+            }
         }
 
         private void loadImages() {
@@ -469,7 +554,7 @@ public class FloatingService extends Service {
                     thumbs.addAll(t);
                     uris.addAll(u);
                     ((BaseAdapter) grid.getAdapter()).notifyDataSetChanged();
-                    empty.setVisibility(thumbs.isEmpty() ? View.VISIBLE : View.GONE);
+                    updateEmptyState(thumbs.size());
                 });
             }).start();
         }

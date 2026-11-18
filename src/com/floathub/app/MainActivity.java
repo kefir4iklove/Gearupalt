@@ -47,7 +47,12 @@ public class MainActivity extends Activity {
     }
 
     private void requestNeededPerms() {
-        if (Build.VERSION.SDK_INT >= 33) {
+        if (Build.VERSION.SDK_INT >= 34) {
+            requestPermissions(new String[]{
+                    "android.permission.READ_MEDIA_IMAGES",
+                    "android.permission.READ_MEDIA_VISUAL_USER_SELECTED",
+                    "android.permission.POST_NOTIFICATIONS"}, REQ_PERMS);
+        } else if (Build.VERSION.SDK_INT == 33) {
             requestPermissions(new String[]{
                     "android.permission.READ_MEDIA_IMAGES",
                     "android.permission.POST_NOTIFICATIONS"}, REQ_PERMS);
@@ -63,12 +68,18 @@ public class MainActivity extends Activity {
         updateStatus();
     }
 
+    private boolean hasMediaPermission() {
+        if (Build.VERSION.SDK_INT >= 33) {
+            return checkSelfPermission("android.permission.READ_MEDIA_IMAGES") == PackageManager.PERMISSION_GRANTED
+                    || checkSelfPermission("android.permission.READ_MEDIA_VISUAL_USER_SELECTED") == PackageManager.PERMISSION_GRANTED;
+        }
+        return checkSelfPermission("android.permission.READ_EXTERNAL_STORAGE") == PackageManager.PERMISSION_GRANTED;
+    }
+
     private void updateStatus() {
         boolean overlay = Settings.canDrawOverlays(this);
-        boolean storage = checkSelfPermission("android.permission.READ_MEDIA_IMAGES") == PackageManager.PERMISSION_GRANTED
-                || checkSelfPermission("android.permission.READ_EXTERNAL_STORAGE") == PackageManager.PERMISSION_GRANTED;
         status.setText("Поверх окон: " + (overlay ? "✔ разрешено" : "✕ не разрешено")
-                + "\nДоступ к фото: " + (storage ? "✔ есть" : "✕ нет (галерея будет пуста)")
+                + "\nДоступ к фото: " + (hasMediaPermission() ? "✔ есть" : "✕ нет (галерея будет пуста)")
                 + "\nПанель: " + (FloatingService.running ? "запущена" : "остановлена"));
         btnToggle.setText(FloatingService.running ? R.string.btn_stop : R.string.btn_start);
     }
